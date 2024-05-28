@@ -1,18 +1,18 @@
 # Tech 258 - Terraform
 
 ## Terraform Overview
-Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. By using Terraform, we can provision and manage our infrastructure automatically, reducing the need for manual intervention.
+Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. By using Terraform, the provisioning and management of infrastructure can happen automatically, reducing the need for manual intervention.
 
-## Why should we use Terraform?
-As we now use Terraform to manage the provisioning of our infrastructure this ensures a variety of benefits:
-- **Consistency**: Terraform reduces human error, ensuring that our deployments remain consistent across all environments.
-- **Scalability**: With predefined configurations, we can easily replicate our infrastructure across development, staging, and production environments.
+## Why Terraform?
+Terraform managing the provisioning of infrastructure ensures a variety of benefits:
+- **Consistency**: Terraform reduces human error, ensuring that deployments remain consistent across all environments.
+- **Scalability**: With predefined configurations, infrastructure can be easily replicated across development, staging, and production environments.
 - **Faster Deployment**: Terraform automates and speeds up the deployment process, which can be further enhanced through continuous integration and continuous deployment (CI/CD) pipelines.
 
-Implementing Terraform in our infrastructure orchestration strategy also offers business benefits too:
-- **Cost Efficiency**: By automating infrastructure provisioning, we reduce the time and resources spent on manual configurations, leading to lower operational costs.
+Implementing Terraform in a infrastructure orchestration strategy also offers business benefits too:
+- **Cost Efficiency**: By automating infrastructure provisioning, time and resources spent on manual configurations are reduced, leading to lower operational costs.
 - **Agility**: Rapidly deploy and scale infrastructure in response to business needs, enabling faster time-to-market for new features and services.
-- **Enhanced Reliability**: Automation and consistency minimize the risk of errors and downtime, ensuring our services are reliable and always available.
+- **Enhanced Reliability**: Automation and consistency minimise the risk of errors and downtime, ensuring services are reliable and always available.
 - **Cloud-Agnostic**: For some businesses, e.g. FinTech Banks, a multi-cloud solution is necessary by law. Terraform is cloud-agnostic meaning it can work with any cloud provider e.g. AWS/Azure/GCP, unlike other alternatives like AWS CloudFormation which is owned by and limited to AWS.
 
 ## Desired State vs Current State - How does Terraform Manage the State?
@@ -30,7 +30,7 @@ Terraform manages the state by comparing the desired state with the current stat
 3) **Applying** (`terraform apply`): Applys the plan, making the necessary changes to match the current state to the desired state. The state file is then updated to reflect these changes.
 
 ## Keeping our Terraform files secure
-When working with Terraform, it's crucial to ensure that sensitive information and state files are kept secure. To prevent this information from being exposed or committed to version control, we can utilise the `.gitignore` file to prevent these files from being tracked. Example `.gitignore` file: <br>
+When working with Terraform, it's crucial to ensure that sensitive information and state files are kept secure. To prevent this information from being exposed or committed to version control, utilise the `.gitignore` file to prevent these files from being tracked. Example `.gitignore` file: <br>
 ![](images/gitignore_file.png)
 
 ## Terraform Architecture Diagram
@@ -55,20 +55,20 @@ echo $AWS_SECRET_ACCESS_KEY
 This will output your keys. **Do not share these with anyone!**
 
 ## Using Terraform with AWS
-1) Create a new directory for our Terraform project e.g. `terraform-tech258`.
-2) Create a new `main.tf` file. This file will store our configuration.
+1) Create a new directory for the Terraform project e.g. `terraform-tech258`.
+2) Create a new `main.tf` file. This file will store the configuration.
 
-### What goes into our main.tf file?
-1) In our case we want to use AWS so enter the provider and the region we want to deploy our infrastructure in. Example:
+### What goes into the main.tf file?
+1) Using AWS in this case, so enter the provider and the region to deploy our infrastructure in. Example:
 ```
 provider "aws" {
 
         region = "eu-west-1"
 }
 ```
-Now that we have done this, save the file and exit. Run `terraform init`. This will create a working directory for Terraform (`.terraform`), downloading the necessary provider plugins and modules e.g. AWS. Example output: <br>
+Now, save the file and exit. Run `terraform init`. This will create a working directory for Terraform (`.terraform`), downloading the necessary provider plugins and modules e.g. AWS. Example output: <br>
 ![terraform_init_output.png](images/terraform_init_output.png) <br>
-2) Now we have initialised our Terraform directory we can go back into our `main.tf` file and set up our resource which we want to deploy on AWS. In this case we want to make a file that deploys a EC2 instance.
+1) Go back into the `main.tf` file and set up the resources to deploy on AWS. In this case, making a file that deploys a EC2 instance.
 We have to create a resource block for this. Example: <br>
 ```
 # Which service/resource - EC2
@@ -88,11 +88,11 @@ resource "aws_instance" "app_instance" {
 }
 
 ```
-3) Now we can save our `main.tf` and use the command `terraform plan` to review the changes before deployment. Example output: <br>
+3) Now, save the `main.tf` and use the command `terraform plan` to review the changes before deployment. Example output: <br>
 ![terraform_plan_output](images/terraform_plan_output.png)
-4) Now we can deploy our infrastructure using the command `terraform apply`. We can add `-auto-approve` to bypass the confirmation prompt. Example output: <br>
+1) Now, deploy the infrastructure using the command `terraform apply`. Add `-auto-approve` to bypass the confirmation prompt. Example output: <br>
 ![terraform_apply_output.png](images/terraform_apply_output.png)
-5) To destroy our infrastructure, we can use the command `terraform destroy`. We can add `-auto-approve` to bypass the confirmation prompt. Example output: <br>
+1) To destroy the infrastructure, use the command `terraform destroy`. Add `-auto-approve` to bypass the confirmation prompt. Example output: <br>
 ![terraform_destroy_output.png](images/terraform_destroy_output.png)
 
 ### Summary
@@ -103,12 +103,12 @@ We have successfully gone through the main Terraform workflow of:
 - Deploying our infrastructure with Terraform (`terraform apply`)
 - Destroying our infrastructure we created with Terraform (`terraform destroy`)
 
-### Why do we want to add a variable.tf file?
+### Why use a variable.tf file?
 Adding a `variable.tf` file in Terraform provides us with an abundance of benefits:
 - **DRY - Dont Repeat Yourself**: We can utilise variables that are re-usable, otherwise we'd have to hardcode and repeat this for each occurence of the same hardcoded parameter.
 - **Version Control**: Variables allow us to keep sensitive information out of our `main.tf` file. We can keep this secure by including `variable.tf` in our `.gitignore` file.
 
-### What goes into our variable.tf file?
+### What goes into the variable.tf file?
 This file will contain the definitions of variables that will be used throughout our Terraform configuration. Example variable: <br>
 ```
 # Declare the AWS region

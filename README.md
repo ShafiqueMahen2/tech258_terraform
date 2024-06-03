@@ -1,5 +1,30 @@
 # Tech 258 - Terraform
 
+- [Tech 258 - Terraform](#tech-258---terraform)
+  - [Terraform Overview](#terraform-overview)
+  - [Why Terraform?](#why-terraform)
+  - [Desired State vs Current State - How does Terraform Manage the State?](#desired-state-vs-current-state---how-does-terraform-manage-the-state)
+    - [Desired State](#desired-state)
+    - [Current State](#current-state)
+    - [Managing the State](#managing-the-state)
+  - [Keeping Terraform files secure](#keeping-terraform-files-secure)
+  - [Terraform Architecture Diagram](#terraform-architecture-diagram)
+  - [Installing Terraform](#installing-terraform)
+  - [Using S3 as a Remote Backend](#using-s3-as-a-remote-backend)
+    - [How does this work?](#how-does-this-work)
+      - [Initialisation:](#initialisation)
+      - [Holding the Lock:](#holding-the-lock)
+      - [Releasing the Lock:](#releasing-the-lock)
+      - [Handling Locking Issues:](#handling-locking-issues)
+  - [Prerequisite for Terraform with AWS](#prerequisite-for-terraform-with-aws)
+  - [Using Terraform with AWS](#using-terraform-with-aws)
+    - [What goes into the main.tf file?](#what-goes-into-the-maintf-file)
+    - [Summary](#summary)
+    - [Why use a variable.tf file?](#why-use-a-variabletf-file)
+    - [What goes into the variable.tf file?](#what-goes-into-the-variabletf-file)
+  - [Using Terraform to create a new GitHub repository](#using-terraform-to-create-a-new-github-repository)
+
+
 ## Terraform Overview
 Terraform is an open-source Infrastructure as Code (IaC) tool developed by HashiCorp. By using Terraform, the provisioning and management of infrastructure can happen automatically, reducing the need for manual intervention.
 
@@ -29,7 +54,7 @@ Terraform manages the state by comparing the desired state with the current stat
 2) **Planning** (`terraform plan`): Compares the desired state with current state, generating a plan showing the changes (if any) to align these two states.
 3) **Applying** (`terraform apply`): Applys the plan, making the necessary changes to match the current state to the desired state. The state file is then updated to reflect these changes.
 
-## Keeping our Terraform files secure
+## Keeping Terraform files secure
 When working with Terraform, it's crucial to ensure that sensitive information and state files are kept secure. To prevent this information from being exposed or committed to version control, utilise the `.gitignore` file to prevent these files from being tracked. Example `.gitignore` file: <br>
 ![](images/gitignore_file.png)
 
@@ -40,6 +65,37 @@ Follow the guide [here](https://developer.hashicorp.com/terraform/tutorials/aws-
 
 Verify the installation using Git Bash. Example: <br>
 ![terraform_version.png](images/terraform_version.png)
+
+## Using S3 as a Remote Backend
+S3 storage can be used for the terraform.tfstate files. This is a great way to add a layer of security and allow them to be shared with other members of the team who will also be working with them. One issue that can arise is that multiple people are working across the state files at the same time without communicating this fact. This is why the state files need to be locked to ensure only one person is making changes at one time. This is automatically done locally but needs to be configured for remote management.
+
+DynamoDB is a key-value and document database that handles large amounts of data and high request rates, making it ideal for a wide range of applications. By setting up state locking with S3 and DynamoDB, you ensure that your Terraform state is managed safely and consistently, allowing multiple users to collaborate without conflict. A single DynamoDB table can be used to lock multiple remote state files. While creating a S3 bucket and DynamoDB table are necessary you also need to set up the backend to declare that S3 and Dynamo will be used for locking/state management.
+
+### How does this work?
+
+#### Initialisation:
+
+Run terraform init to initialize the backend configuration. Terraform will set up the S3 bucket for state storage and the DynamoDB table for state locking.
+Acquiring a Lock:
+
+When you run a Terraform command that modifies the state (e.g., terraform plan or terraform apply), Terraform will attempt to acquire a lock in the DynamoDB table.
+If the lock is acquired successfully, Terraform proceeds with the operation.
+
+#### Holding the Lock:
+
+While the Terraform operation is in progress, the lock is held in the DynamoDB table. This prevents other Terraform operations from running concurrently and modifying the state file.
+
+#### Releasing the Lock:
+
+Once the operation is complete, Terraform releases the lock from the DynamoDB table, allowing other operations to proceed.
+
+#### Handling Locking Issues:
+
+If a Terraform operation is interrupted or fails to release the lock, you can manually remove the lock using the terraform force-unlock command with the lock ID.
+Region Requirement:
+
+The S3 bucket and the resources (such as EC2 instances) accessing it must be in the same AWS region to avoid cross-region data transfer costs and potential latency issues.
+If your S3 bucket is in the eu-west-1 region, your EC2 instances should also be in the eu-west-1 region for optimal performance and cost.
 
 ## Prerequisite for Terraform with AWS
   Ensure you store your `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` as environmental variables. 
@@ -68,27 +124,238 @@ provider "aws" {
 ```
 Now, save the file and exit. Run `terraform init`. This will create a working directory for Terraform (`.terraform`), downloading the necessary provider plugins and modules e.g. AWS. Example output: <br>
 ![terraform_init_output.png](images/terraform_init_output.png) <br>
-1) Go back into the `main.tf` file and set up the resources to deploy on AWS. In this case, making a file that deploys a EC2 instance.
-We have to create a resource block for this. Example: <br>
+1) Go back into the `main.tf` file and set up the resources to deploy. In this case, making a file that:
+- Creates a VPC and sets up networking (subnets, route tables, etc).
+- App EC2 Instance in Public Subnet.
+- MongoDB EC2 Instance in Private Subnet.
+- Uses an already setup S3 Bucket as a Remote Backend.
+- Automatically generates a GitHub Repo named `IaC-github-automated-repo`. <br>
+
+**Example main.tf configuration:** <br>
 ```
-# Which service/resource - EC2
-resource "aws_instance" "app_instance" {
+# ========PROVIDERS========
 
-# which ami to use
-        ami = "ami-02f0341ac93c96375"
-# which type of instance - t2.micro
-        instance_type = "t2.micro"
-# associate public ip with this instance
-        associate_public_ip_address = true
+provider "aws" {
+	region = "eu-west-1"
+}
 
-# name the ec2/resource
-        tags = {
-             Name = "shafique-tech258-terraform-app"
-        }
+provider "github" {
+  token = var.GITHUB_TOKEN
+}
+
+# ========GITHUB REPOSITORY========
+
+resource "github_repository" "automated_repo" {
+  name        = var.repo_name
+  description = "Automatically generated repo with Terraform"
+  visibility  = "public"
+}
+
+# ========S3 REMOTE BACKEND========
+
+terraform {
+  backend "s3" {
+    bucket = "tech258-shafique-terraform-bucket"
+    key = "dev/terraform.tfstate"
+    region = "eu-west-1"
+    
+  }
+}
+
+# ========AWS ORCHESTRATION========
+
+## ========VPC========
+resource "aws_vpc" "app-vpc" {
+    cidr_block = var.vpc_cidr_block
+
+    tags = {
+    Name = var.vpc_name
+  }
+}
+
+## ========INTERNET GATEWAY========
+resource "aws_internet_gateway" "gw" {
+    vpc_id = aws_vpc.app-vpc.id
+}
+
+## ========ROUTE TABLE========
+resource "aws_route_table" "app-route-table" {
+    vpc_id = aws_vpc.app-vpc.id
+    
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.gw.id
+    }
+    route {
+        ipv6_cidr_block = "::/0"
+        gateway_id = aws_internet_gateway.gw.id
+    }
+
+    tags = {
+        Name = var.route_table_name
+    }
+}
+
+
+
+## ========APP SUBNET========
+resource "aws_subnet" "app-subnet" {
+    vpc_id = aws_vpc.app-vpc.id
+    cidr_block = var.app_subnet_cidr_block
+    availability_zone = var.availability_zone
+    tags = {
+        Name = var.app_subnet_name
+    }
+}
+
+## ========DB SUBNET========
+resource "aws_subnet" "db-subnet" {
+    vpc_id = aws_vpc.app-vpc.id
+    cidr_block = var.db_subnet_cidr_block
+    availability_zone = "eu-west-1a"
+
+    tags = {
+        Name = var.db_subnet_name
+    }
+}
+
+
+## ========ASSOCIATE SUBNET WITH ROUTE TABLE========
+resource "aws_route_table_association" "a" {
+    subnet_id = aws_subnet.app-subnet.id
+    route_table_id = aws_route_table.app-route-table.id
+}
+
+## ========APP SECURITY GROUP========
+resource "aws_security_group" "tech258-shafique-allow-web" {
+    name = "allow_web_traffic"
+    description = "Allow TLS inbound traffic"
+    vpc_id = aws_vpc.app-vpc.id
+    
+    ingress {
+        description = "HTTPS"
+        from_port = 443
+        to_port = 443
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        description = "HTTP"
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        description = "SSH"
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]        
+    }
+    ingress {
+        description = "Node"
+        from_port = 3000
+        to_port = 3000
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+      Name = "tech258-shafique-allow-web"
+    }
+}
+
+## ========DB SECURITY GROUP========
+resource "aws_security_group" "tech258-shafique-allow-db" {
+    name = "allow_db_traffic"
+    description = "Allow TLS inbound traffic"
+    vpc_id = aws_vpc.app-vpc.id
+    
+    ingress {
+        description = "mongo"
+        from_port = 27017
+        to_port = 27017
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        description = "SSH"
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]        
+    }
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+      Name = "tech258-shafique-allow-db"
+    }
+}
+
+
+
+
+## ========CREATE DB========
+resource "aws_instance" "db" {
+    depends_on = [ aws_security_group.tech258-shafique-allow-db ]
+    ami = var.db_ami_id
+    instance_type = var.ec2_instance_type
+    availability_zone = var.availability_zone
+    
+    key_name = var.key_name
+    vpc_security_group_ids = [aws_security_group.tech258-shafique-allow-db.id]
+
+    subnet_id = aws_subnet.db-subnet.id
+
+    associate_public_ip_address = true
+
+    user_data = "${file("user-data-mongo.sh")}"
+
+    tags = {
+        Name = "tech258-shafique-db"
+    }
+
+}
+
+
+
+## ========CREATE APP========
+resource "aws_instance" "app" {
+    depends_on = [ aws_instance.db ]
+    ami = var.ami_id
+    instance_type = var.ec2_instance_type
+    availability_zone = var.availability_zone
+    
+    key_name = var.key_name
+    vpc_security_group_ids = [aws_security_group.tech258-shafique-allow-web.id]
+    
+    subnet_id = aws_subnet.app-subnet.id
+
+    associate_public_ip_address = true
+
+    user_data = templatefile("${path.module}/user-data-node.tftpl", {
+    db_host = aws_instance.db.private_ip
+  })
+
+    tags = {
+        Name = "tech258-shafique-app"
+    }
 }
 
 ```
-3) Now, save the `main.tf` and use the command `terraform plan` to review the changes before deployment. Example output: <br>
+1) Now, save the `main.tf` and use the command `terraform plan` to review the changes before deployment. Example output: <br>
 ![terraform_plan_output](images/terraform_plan_output.png)
 1) Now, deploy the infrastructure using the command `terraform apply`. Add `-auto-approve` to bypass the confirmation prompt. Example output: <br>
 ![terraform_apply_output.png](images/terraform_apply_output.png)
